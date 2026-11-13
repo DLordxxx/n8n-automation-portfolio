@@ -49,4 +49,4 @@
 
 ## 📫 Контакты
 *   Telegram: [@denisJAPAN](https://t.me/denisJAPAN)
-*   HH.ru: [Резюме](https://hh.ru/resume/cf602780ff1127f8640039ed1f415261767953)
+*   HH.ru: [https://hh.ru/resume](https://hh.ru/resume/8aeb2501ff0f21a8430039ed1f67613661575a)
