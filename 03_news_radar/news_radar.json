@@ -1,0 +1,315 @@
+{
+  "name": "03. News Radar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        192
+      ],
+      "id": "xxx",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://dtf.ru/rss",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        192
+      ],
+      "id": "xxx",
+      "name": "RSS Read"
+    },
+    {
+      "parameters": {
+        "chatId": "xxx",
+        "text": "=📰 <b>Твой утренний дайджест:</b>\n\n{{ $json.output }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        192
+      ],
+      "id": "xxx",
+      "name": "Send a text message",
+      "webhookId": "xxx",
+      "credentials": {
+        "telegramApi": {
+          "id": "xxx",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Получаем список уже отправленных ссылок из таблицы\nconst sentItems = $('Get row(s) in sheet').all();\nconst sentLinks = sentItems.map(item => item.json.link);\n\n// 2. Получаем новости из RSS\nconst newsItems = $('RSS Read').all();\n\n// 3. Оставляем только те новости, которых нет в таблице\nconst freshNews = newsItems.filter(item => !sentLinks.includes(item.json.link));\n\nlet allNews = \"\";\nfor (const item of freshNews) {\n  allNews += `- Заголовок: ${item.json.title}\\n  Ссылка: ${item.json.link}\\n`;\n}\n\n// Если новых новостей нет — останавливаем (возвращаем пустой массив)\nif (allNews === \"\") {\n  return []; \n}\n\n// Возвращаем текст для ИИ и ссылки, которые нужно сохранить в базу\nreturn [{ json: { \n  news_text: allNews,\n  links_to_save: freshNews.map(n => n.json.link) \n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        192
+      ],
+      "id": "xxx",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ты — аналитик игровой индустрии, специализирующийся на RMT-рынке и цифровых товарах (скины, аккаунты, валюта).\n\nВот список новостей за сегодня:\n{{ $('Code in JavaScript').item.json.news_text }}\n\nВыбери 3 или 4 самые важные новости, которые напрямую влияют на рынок цифровых товаров, CS2, Roblox, Steam или Dota 2. Игнорируй мелкие патчи и сплетни. Если новостей про эти игры нет, выбери самые значимые релизы индустрии.\n\nФормат ответа строго такой (используй именно HTML-теги для жирного шрифта и ссылок):\n\n<b>Заголовок новости</b>\nКраткое описание в одно предложение (с эмодзи).\n<a href=\"ссылка_из_списка\">Читать полностью</a>\n\n<b>Заголовок новости</b>\n...\n\nОтвечай на русском языке. Приветствие писать не нужно, сразу переходи к списку.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        896,
+        192
+      ],
+      "id": "xxx",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        768,
+        400
+      ],
+      "id": "xxx",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "xxx",
+          "mode": "list",
+          "cachedResultName": "GGSEL News Radar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Отправленные новости",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        192
+      ],
+      "id": "xxx",
+      "name": "Get row(s) in sheet",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "xxx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "xxx",
+          "mode": "list",
+          "cachedResultName": "GGSEL News Radar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "=Отправленные новости",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $json.links_to_save }}"
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        992,
+        0
+      ],
+      "id": "xxx",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "xxx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "links_to_save",
+        "include": "=",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        784,
+        0
+      ],
+      "id": "xxx",
+      "name": "Split Out"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "xxx",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "xxx"
+  },
+  "nodeGroups": [],
+  "id": "xxx",
+  "tags": []
+}
