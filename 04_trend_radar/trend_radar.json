@@ -1,0 +1,689 @@
+{
+  "name": "04. Trend Radar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        864,
+        0
+      ],
+      "id": "xxx",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "xxx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1072,
+        0
+      ],
+      "id": "xxx",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const games = $input.first().json.response.ranks;\nconst limitedGames = games.slice(0, 50);\n\nreturn limitedGames.map(game => ({\n  json: {\n    appid: game.appid,\n    peak_in_game: game.peak_in_game // <--- СОХРАНЯЕМ ОНЛАЙН!\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        0
+      ],
+      "id": "xxx",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1584,
+        0
+      ],
+      "id": "xxx",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        -32
+      ],
+      "id": "xxx",
+      "name": "Wait",
+      "webhookId": "xxx"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ты — строгий аналитик RMT-рынка. Твоя задача — находить аномалии, а не констатировать факты.\nДанные об игре:\nНазвание: {{ $json.name }} Онлайн сегодня: {{ $json.peak_in_game }}\nОнлайн вчера: {{ $('Code in JavaScript3').item.json.yesterday_peak }} Рост за сутки: {{ $('Code in JavaScript3').item.json.growth }}%\n\nПРАВИЛА ОЦЕНКИ (СТРОГО):\n1. Если рост 0% или меньше — вердикт НИЗКИЙ.\n2. Если рост более 15% — вердикт ВЫСОКИЙ (аномалия).\n3. Если рост от 5% до 15% — вердикт СРЕДНИЙ.\n\nФОРМАТ ОТВЕТА:\nНачинай ответ строго с одного слова: ВЫСОКИЙ, СРЕДНИЙ или НИЗКИЙ. \nЗатем кратко объясни бизнес-ценность для RMT. \nВ конце добавь ОДНО предложение с гипотезой (почему это могло произойти): например, \"Вероятно, связано с выходом обновления, активностью стримеров или выходными днями\".",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3248,
+        -16
+      ],
+      "id": "xxx",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        3120,
+        192
+      ],
+      "id": "xxx",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "xxx",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "ВЫСОКИЙ",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "xxx",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "СРЕДНИЙ",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        3488,
+        -16
+      ],
+      "id": "xxx",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst messages = staticData.final_messages || [];\n\n// Если ничего не собрали\nif (messages.length === 0) {\n  staticData.final_messages = [];\n  staticData.sent_appids = [];\n  return [{ json: { text: \"🤖 <b>Анализ завершен.</b>\\nСегодня не найдено игр с высоким или средним RMT-потенциалом.\" } }];\n}\n\n// Склеиваем все карточки игр в один большой текст\nconst fullText = messages.join('\\n---\\n');\n\n// Лимит Телеграма — 4096 символов. Берем 3500 для запаса.\nconst MAX_LENGTH = 3500;\nlet chunks = [];\nlet currentChunk = \"\";\n\n// Бьем текст на куски\nconst blocks = fullText.split('\\n---\\n'); \nfor (let block of blocks) {\n  if ((currentChunk + block).length > MAX_LENGTH) {\n    chunks.push(currentChunk);\n    currentChunk = block + '\\n---\\n';\n  } else {\n    currentChunk += block + '\\n---\\n';\n  }\n}\nif (currentChunk.trim() !== \"\") {\n  chunks.push(currentChunk);\n}\n\n// Очищаем память для следующего запуска\nstaticData.final_messages = [];\nstaticData.sent_appids = [];\n\n// Возвращаем массив (n8n сам поймет, что нужно отправить несколько сообщений)\nreturn chunks.map(chunk => ({ json: { text: chunk } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        -272
+      ],
+      "id": "xxx",
+      "name": "Форматирование"
+    },
+    {
+      "parameters": {
+        "chatId": "xxx",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2096,
+        -272
+      ],
+      "id": "xxx",
+      "name": "Send a text message",
+      "webhookId": "xxx",
+      "credentials": {
+        "telegramApi": {
+          "id": "xxx",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentGame = $('Parse Steam Data').item.json;\nconst today = new Date().toISOString().split('T')[0];\nconst existingRows = $input.all();\n\nlet isDuplicate = false;\nlet yesterdayPeak = null;\n\nfor (const row of existingRows) {\n  if (String(row.json.appid) === String(currentGame.appid)) {\n    if (row.json.date === today) {\n      isDuplicate = true;\n    } else {\n      yesterdayPeak = row.json.peak_in_game;\n    }\n  }\n}\n\n// Считаем рост (ЭТОГО КУСКА У ТЕБЯ НЕ ХВАТАЛО)\nlet growth = 0;\nif (yesterdayPeak && currentGame.peak_in_game) {\n  growth = ((currentGame.peak_in_game - yesterdayPeak) / yesterdayPeak) * 100;\n}\n\n// Проверяем на тренд\nlet isTrend = false;\nif (!yesterdayPeak || growth > 10) { \n    isTrend = true; \n}\n\nreturn {\n  ...currentGame,\n  yesterday_peak: yesterdayPeak,\n  growth: growth.toFixed(2), // Например: \"15.40\"\n  is_duplicate: isDuplicate,\n  is_trend: isTrend\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        -16
+      ],
+      "id": "xxx",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Production-Ready",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1786200410,
+          "mode": "list",
+          "cachedResultName": "История онлайна",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=1786200410"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "appid": "={{ $json.appid }}",
+            "name": "={{ $json.name }}",
+            "peak_in_game": "={{ $json.peak_in_game }}",
+            "date": "={{ $now.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "appid",
+              "displayName": "appid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "peak_in_game",
+              "displayName": "peak_in_game",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2800,
+        -208
+      ],
+      "id": "xxx",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "xxx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Production-Ready",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1786200410,
+          "mode": "list",
+          "cachedResultName": "История онлайна",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=1786200410"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2256,
+        -96
+      ],
+      "id": "xxx",
+      "name": "Get row(s) in sheet1",
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "xxx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "xxx",
+              "leftValue": "={{ $json.is_duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2608,
+        -32
+      ],
+      "id": "xxx",
+      "name": "Дубль?"
+    },
+    {
+      "parameters": {
+        "url": "xxx",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "cc",
+              "value": "lrussian "
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1952,
+        -80
+      ],
+      "id": "xxx",
+      "name": "Get Steam AppDetails",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst appid = Object.keys(response)[0];\nconst game = response[appid].data;\n\nif (!game) return [];\n\n// Берем онлайн из текущего шага цикла\nconst peak = $('Loop Over Items').item.json.peak_in_game;\n\nreturn [{\n  json: {\n    name: game.name,\n    price: game.is_free ? \"Бесплатно\" : (game.price_overview ? game.price_overview.final_formatted : \"Нет в продаже\"),\n    genres: game.genres ? game.genres.map(g => g.description).join(', ') : 'Не указаны',\n    appid: appid,\n    peak_in_game: peak // <--- ПРИКЛЕИВАЕМ ОНЛАЙН!\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -16
+      ],
+      "id": "xxx",
+      "name": "Parse Steam Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "xxx",
+              "leftValue": "={{ $('Parse Steam Data').item.json.price }}",
+              "rightValue": true,
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        3024,
+        -64
+      ],
+      "id": "xxx",
+      "name": "Check RMT Potential"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nstaticData.final_messages = staticData.final_messages || [];\nstaticData.sent_appids = staticData.sent_appids || [];\n\nconst aiOutput = $('AI Agent').item.json.output || \"Вердикт отсутствует\";\nconst gameData = $('Parse Steam Data').item.json;\n\n// Формируем ссылку на Steam\nconst steamUrl = `https://store.steampowered.com/app/${gameData.appid}`;\n\n// Формируем карточку с кликабельной ссылкой\nstaticData.final_messages.push(\n  `🎮 <a href=\"${steamUrl}\"><b>${gameData.name}</b></a>\\n` +\n  `💰 <b>Цена:</b> ${gameData.price}\\n` +\n  `📊 <b>Жанры:</b> ${gameData.genres}\\n\\n` +\n  `🤖 <b>Вердикт ИИ:</b> <i>${aiOutput}</i>\\n`\n);\n\nstaticData.sent_appids.push({ appid: gameData.appid }); \n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        144
+      ],
+      "id": "xxx",
+      "name": "Accumulate Valid Games"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Форматирование",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Steam AppDetails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Accumulate Valid Games",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматирование": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Дубль?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Check RMT Potential",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Дубль?": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Steam AppDetails": {
+      "main": [
+        [
+          {
+            "node": "Parse Steam Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Steam Data": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check RMT Potential": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accumulate Valid Games": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "xxx",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "xxx"
+  },
+  "nodeGroups": [],
+  "id": "xxx",
+  "tags": []
+}
