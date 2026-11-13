@@ -1,0 +1,73 @@
+{
+  "name": "01. Order Notify (Заказы)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-order",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "xxx",
+      "name": "Webhook",
+      "webhookId": "xxx"
+    },
+    {
+      "parameters": {
+        "chatId": "xxx",
+        "text": "=🔔 <b>НОВЫЙ ЗАКАЗ НА ВИТРИНЕ!</b>\n\n📦 <b>Товар:</b> {{ $json.body.item }}\n🔗 <b>Ссылка на трейд:</b> {{ $json.body.trade_url }}\n\n⏳ <i>Пожалуйста, выдайте товар и подтвердите выполнение в чате.</i>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "xxx",
+      "name": "Send a text message",
+      "webhookId": "xxx",
+      "credentials": {
+        "telegramApi": {
+          "id": "xxx",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "xxx",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "xxx"
+  },
+  "nodeGroups": [],
+  "id": "xxx",
+  "tags": []
+}
