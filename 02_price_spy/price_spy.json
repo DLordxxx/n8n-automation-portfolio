@@ -1,0 +1,295 @@
+{
+  "name": "02. Price Spy (Шпион цен)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        96
+      ],
+      "id": "xxx",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "xxx",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        96
+      ],
+      "id": "xxx",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "xxx",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Данные от API конкурента\nconst apiData = $json;\n\n// Данные из нашей таблицы Google Sheets (указываем точное имя узла)\nconst sheetData = $('Get row(s) in sheet').item.json; \n\n// Проверка, что API не выдало ошибку\nif (!apiData.items || apiData.items.length === 0) {\n  return [{ json: { skip: true } }]; \n}\n\n// Берем самую низкую цену и название магазина\nconst minPrice = apiData.items[0].lowest_ask_decimal;\nconst bestProvider = apiData.items[0].provider;\n\n// Берем нашу цену из таблицы (превращаем текст в число)\nconst ggselPrice = parseFloat(sheetData.ggsel_price);\n\n// Считаем разницу в процентах\nconst diffPercent = (((ggselPrice - minPrice) / ggselPrice) * 100).toFixed(1);\n\nreturn [{\n  json: {\n    item_name: sheetData.item_name,\n    ggsel_price: ggselPrice,\n    min_competitor_price: minPrice,\n    competitor_name: bestProvider,\n    diff_percent: diffPercent,\n    is_critical: parseFloat(diffPercent) > 5 // Падение больше 5%\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        96
+      ],
+      "id": "xxx",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "xxx",
+              "leftValue": "={{ $json.is_critical }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1344,
+        96
+      ],
+      "id": "xxx",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "xxx",
+        "text": "=🚨 <b>Алерт по демпингу на ggsel!</b>\n\n📦 <b>Товар:</b> {{ $json.item_name }}\n💰 <b>Наша цена (ggsel):</b> ${{ $json.ggsel_price }}\n📉 <b>Цена конкурента ({{ $json.competitor_name }}):</b> ${{ $json.min_competitor_price }}\n🔥 <b>Разница:</b> {{ $json.diff_percent }}%\n\n⚠️ <i>Конкурент дешевле! Нужно срочно связаться с селлером.</i>",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Перейти к конкуренту",
+                    "additionalFields": {
+                      "url": "https://cs.money/ru/csgo/store/?search=AK-47%20%7C%20Redline%20(Field-Tested)"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "xxx",
+      "name": "Send a text message",
+      "webhookId": "xxx",
+      "credentials": {
+        "telegramApi": {
+          "id": "xxx",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "GGSEL Price Spy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Мои цены",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        96
+      ],
+      "id": "xxx",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "xxx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        96
+      ],
+      "id": "xxx",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        96
+      ],
+      "id": "xxx",
+      "name": "Wait",
+      "webhookId": "xxx"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "edf242c8-effd-4e2e-ba98-960ee2631e84",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "xxx"
+  },
+  "nodeGroups": [],
+  "id": "xxx",
+  "tags": []
+}
